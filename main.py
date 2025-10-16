@@ -49,6 +49,94 @@ def animate_quadrotor_response(t, X, z_des, phi_des, theta_des, psi_des):
     plt.tight_layout()
     plt.show()
 
+# ==========================================================
+# === Plotting Functions ===================================
+# ==========================================================
+def plot_all_responses(t, X, z_des, phi_des, theta_des, psi_des, filename):
+    """
+    Plot all responses (z, phi, theta, psi) in separate subplots
+    """
+    z = X[2, :]
+    phi = X[3, :]
+    theta = X[4, :]
+    psi = X[5, :]
+    
+    fig, axs = plt.subplots(4, 1, figsize=(10, 12), sharex=True)
+    
+    # Altitude
+    axs[0].plot(t, z, 'b-', linewidth=2)
+    axs[0].axhline(y=z_des, color='r', linestyle='--', label='Desired')
+    axs[0].set_ylabel('Altitude z (m)')
+    axs[0].legend()
+    axs[0].grid(True)
+    axs[0].set_title('Altitude Response')
+    
+    # Roll
+    axs[1].plot(t, phi, 'g-', linewidth=2)
+    axs[1].axhline(y=phi_des, color='r', linestyle='--', label='Desired')
+    axs[1].set_ylabel('Roll φ (rad)')
+    axs[1].legend()
+    axs[1].grid(True)
+    axs[1].set_title('Roll Response')
+    
+    # Pitch
+    axs[2].plot(t, theta, 'm-', linewidth=2)
+    axs[2].axhline(y=theta_des, color='r', linestyle='--', label='Desired')
+    axs[2].set_ylabel('Pitch θ (rad)')
+    axs[2].legend()
+    axs[2].grid(True)
+    axs[2].set_title('Pitch Response')
+    
+    # Yaw
+    axs[3].plot(t, psi, 'c-', linewidth=2)
+    axs[3].axhline(y=psi_des, color='r', linestyle='--', label='Desired')
+    axs[3].set_ylabel('Yaw ψ (rad)')
+    axs[3].set_xlabel('Time (s)')
+    axs[3].legend()
+    axs[3].grid(True)
+    axs[3].set_title('Yaw Response')
+    
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+def plot_top5_responses(mejores_resultados, z_des, phi_des, theta_des, psi_des, filename):
+    """
+    Plot the top 5 trajectories for all variables
+    """
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    axs = axs.flatten()
+    
+    variables = ['z', 'phi', 'theta', 'psi']
+    desired_values = [z_des, phi_des, theta_des, psi_des]
+    titles = ['Altitude z', 'Roll φ', 'Pitch θ', 'Yaw ψ']
+    colors = ['b', 'g', 'r', 'c']
+    
+    for i, (var, des, title, color) in enumerate(zip(variables, desired_values, titles, colors)):
+        for j, result in enumerate(mejores_resultados[:5]):
+            if var == 'z':
+                data = result['z']
+            elif var == 'phi':
+                data = result['phi']
+            elif var == 'theta':
+                data = result['theta']
+            else:  # psi
+                data = result['psi']
+                
+            axs[i].plot(result['t'], data, color=color, alpha=0.7, linewidth=1.5, 
+                       label=result['label'] if i == 0 else "")
+        
+        axs[i].axhline(y=des, color='k', linestyle='--', linewidth=2, label='Desired' if i == 0 else "")
+        axs[i].set_ylabel(title)
+        axs[i].set_xlabel('Time (s)')
+        axs[i].grid(True)
+        axs[i].set_title(f'{title} Response')
+    
+    # Add legend only to the first subplot to avoid repetition
+    axs[0].legend(loc='upper right')
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
 
 # ==========================================================
 # === Main PSO-PID Functions ===============================
@@ -67,22 +155,22 @@ def pso_pid_multiple_tests():
         z_des, phi_des, theta_des, psi_des = desired_combinations[i]
         excel_filename = f'Results_PSO_PID_Test_{i+1}.xlsx'
         fitness_figure_name = f'Convergence_Test_{i+1}.png'
-        z_figure_name = f'ResponseZ_Test_{i+1}.png'
+        response_figure_name = f'All_Responses_Test_{i+1}.png'
 
         pso_pid_optimization_with_metrics(
             z_des, phi_des, theta_des, psi_des,
-            excel_filename, fitness_figure_name, z_figure_name
+            excel_filename, fitness_figure_name, response_figure_name
         )
 
 
 def pso_pid_optimization_with_metrics(z_des, phi_des, theta_des, psi_des, 
-                                     excel_filename, fitness_figure_name, z_figure_name):
+                                     excel_filename, fitness_figure_name, response_figure_name):
 
-    num_tests = 5   # reduce for faster animation tests
+    num_tests = 5   # Reduced for testing, change to 30 for final run
     results = []
     best_fitness_over_time = []
     best_global_overall = {'fitness': float('inf')}
-    best_results = []
+    mejores_resultados = []
     
     os.makedirs('results', exist_ok=True)
     
@@ -93,30 +181,83 @@ def pso_pid_optimization_with_metrics(z_des, phi_des, theta_des, psi_des,
         
         best_fitness_over_time.append(convergence_fitness)
         
+        # Extract all responses
+        z_best = X_best[2, :]
+        phi_best = X_best[3, :]
+        theta_best = X_best[4, :]
+        psi_best = X_best[5, :]
+        
         result = {
             'Test': test + 1,
             'Fitness': global_best['fitness'],
-            'SettlingTime': metrics['t_settle'],
-            'Overshoot': metrics['overshoot'],
-            'RiseTime': metrics['t_rise'],
-            'SteadyError': metrics['steady_error'],
-            'ITSE': metrics['ITSE'],
-            'IAE': metrics['IAE'],
-            'RMSE': metrics['RMSE']
+            'SettlingTime_z': metrics['t_settle_z'],
+            'SettlingTime_phi': metrics['t_settle_phi'],
+            'SettlingTime_theta': metrics['t_settle_theta'],
+            'SettlingTime_psi': metrics['t_settle_psi'],
+            'Overshoot_z': metrics['overshoot_z'],
+            'Overshoot_phi': metrics['overshoot_phi'],
+            'Overshoot_theta': metrics['overshoot_theta'],
+            'Overshoot_psi': metrics['overshoot_psi'],
+            'RiseTime_z': metrics['t_rise_z'],
+            'RiseTime_phi': metrics['t_rise_phi'],
+            'RiseTime_theta': metrics['t_rise_theta'],
+            'RiseTime_psi': metrics['t_rise_psi'],
+            'SteadyError_z': metrics['steady_error_z'],
+            'SteadyError_phi': metrics['steady_error_phi'],
+            'SteadyError_theta': metrics['steady_error_theta'],
+            'SteadyError_psi': metrics['steady_error_psi'],
+            'ITSE_z': metrics['ITSE_z'],
+            'ITSE_phi': metrics['ITSE_phi'],
+            'ITSE_theta': metrics['ITSE_theta'],
+            'ITSE_psi': metrics['ITSE_psi'],
+            'IAE_z': metrics['IAE_z'],
+            'IAE_phi': metrics['IAE_phi'],
+            'IAE_theta': metrics['IAE_theta'],
+            'IAE_psi': metrics['IAE_psi'],
+            'RMSE_z': metrics['RMSE_z'],
+            'RMSE_phi': metrics['RMSE_phi'],
+            'RMSE_theta': metrics['RMSE_theta'],
+            'RMSE_psi': metrics['RMSE_psi'],
+            # PID Gains
+            'Kp_z': global_best['position'][0],
+            'Ki_z': global_best['position'][1],
+            'Kd_z': global_best['position'][2],
+            'Kp_phi': global_best['position'][3],
+            'Ki_phi': global_best['position'][4],
+            'Kd_phi': global_best['position'][5],
+            'Kp_theta': global_best['position'][6],
+            'Ki_theta': global_best['position'][7],
+            'Kd_theta': global_best['position'][8],
+            'Kp_psi': global_best['position'][9],
+            'Ki_psi': global_best['position'][10],
+            'Kd_psi': global_best['position'][11]
         }
         results.append(result)
+        
+        # Store for top 5 plots
+        mejores_resultados.append({
+            't': t_best,
+            'z': z_best,
+            'phi': phi_best,
+            'theta': theta_best,
+            'psi': psi_best,
+            'label': f'Test {test+1}',
+            'fitness': global_best['fitness']
+        })
         
         if global_best['fitness'] < best_global_overall['fitness']:
             best_global_overall = global_best
             t_global_best = t_best
             X_global_best = X_best
         
-        print(f"{test+1}\tFitness: {global_best['fitness']:.4f}")
+        print(f"{test+1}\tFitness: {global_best['fitness']:.4f}\t"
+              f"Settle_z: {metrics['t_settle_z']:.4f}\tSettle_phi: {metrics['t_settle_phi']:.4f}")
     
     df = pd.DataFrame(results)
     df.to_excel(os.path.join('results', excel_filename), index=False)
     print(f'\nFile saved: {excel_filename}')
     
+    # Average convergence plot
     avg_convergence = np.mean(best_fitness_over_time, axis=0)
     plt.figure()
     plt.plot(avg_convergence, 'b-', linewidth=2)
@@ -127,7 +268,16 @@ def pso_pid_optimization_with_metrics(z_des, phi_des, theta_des, psi_des,
     plt.savefig(os.path.join('results', fitness_figure_name))
     plt.close()
     
-    # === Animate final best response ===
+    # Plot all responses for the best solution
+    plot_all_responses(t_global_best, X_global_best, z_des, phi_des, theta_des, psi_des,
+                      os.path.join('results', response_figure_name))
+    
+    # Plot top 5 responses
+    mejores_resultados.sort(key=lambda x: x['fitness'])
+    plot_top5_responses(mejores_resultados, z_des, phi_des, theta_des, psi_des,
+                       os.path.join('results', response_figure_name.replace('.png', '_Top5.png')))
+    
+    # Animate final best response
     print("\nAnimating best test response...")
     animate_quadrotor_response(t_global_best, X_global_best, z_des, phi_des, theta_des, psi_des)
 
@@ -136,8 +286,8 @@ def optimize_pid_with_pso_and_metrics(z_des, phi_des, theta_des, psi_des):
     nVar = 12
     VarMin = np.array([2.0, 0.01, 0.1,  0.1, 0.001, 0.1,  0.1, 0.001, 0.1,  0.1, 0.001, 0.1])
     VarMax = np.array([15,  2.0,  5.0, 10,  0.1,   2.0, 10,  0.1,   2.0, 10,  0.1,   2.0])
-    MaxIter = 30
-    nPop = 20
+    MaxIter = 30    # Reduced for testing, change to 100 for final run
+    nPop = 20       # Reduced for testing, change to 50 for final run
     w = 0.7
     d = 0.97
     c1 = 1.7
@@ -157,7 +307,9 @@ def optimize_pid_with_pso_and_metrics(z_des, phi_des, theta_des, psi_des):
             'fitness': float('inf'),
             'best': {'position': None, 'fitness': float('inf')}
         }
-        particle['fitness'], _, _, _, _ = evaluate_pid(particle['position'], z_des, phi_des, theta_des, psi_des)
+        # CORREGIDO: La función evaluate_pid retorna 4 valores, no 5
+        fitness, metrics_temp, t_temp, X_temp = evaluate_pid(particle['position'], z_des, phi_des, theta_des, psi_des)
+        particle['fitness'] = fitness
         particle['best'] = {'position': particle['position'].copy(), 'fitness': particle['fitness']}
         if particle['fitness'] < global_best['fitness']:
             global_best = {'position': particle['position'].copy(), 'fitness': particle['fitness']}
@@ -169,10 +321,13 @@ def optimize_pid_with_pso_and_metrics(z_des, phi_des, theta_des, psi_des):
             particles[i]['velocity'] = (w * particles[i]['velocity'] + 
                 c1 * r1 * (particles[i]['best']['position'] - particles[i]['position']) + 
                 c2 * r2 * (global_best['position'] - particles[i]['position']))
+            
+            # CORREGIDO: Error de sintaxis en esta línea - corregir los corchetes
             particles[i]['position'] = np.clip(
                 particles[i]['position'] + particles[i]['velocity'], VarMin, VarMax)
             
-            fitness, temp_metrics, t, z, X = evaluate_pid(
+            # CORREGIDO: Usar 4 valores de retorno
+            fitness, temp_metrics, t, X = evaluate_pid(
                 particles[i]['position'], z_des, phi_des, theta_des, psi_des)
             particles[i]['fitness'] = fitness
             
@@ -205,8 +360,17 @@ def evaluate_pid(gains, z_des, phi_des, theta_des, psi_des):
      Kp_theta, Ki_theta, Kd_theta,
      Kp_psi, Ki_psi, Kd_psi) = gains
     
-    metrics = {'t_settle': np.nan, 'overshoot': np.nan, 't_rise': np.nan,
-               'steady_error': np.nan, 'ITSE': np.nan, 'IAE': np.nan, 'RMSE': np.nan}
+    # Initialize metrics for all variables
+    metrics = {
+        't_settle_z': np.nan, 'overshoot_z': np.nan, 't_rise_z': np.nan, 'steady_error_z': np.nan,
+        't_settle_phi': np.nan, 'overshoot_phi': np.nan, 't_rise_phi': np.nan, 'steady_error_phi': np.nan,
+        't_settle_theta': np.nan, 'overshoot_theta': np.nan, 't_rise_theta': np.nan, 'steady_error_theta': np.nan,
+        't_settle_psi': np.nan, 'overshoot_psi': np.nan, 't_rise_psi': np.nan, 'steady_error_psi': np.nan,
+        'ITSE_z': np.nan, 'IAE_z': np.nan, 'RMSE_z': np.nan,
+        'ITSE_phi': np.nan, 'IAE_phi': np.nan, 'RMSE_phi': np.nan,
+        'ITSE_theta': np.nan, 'IAE_theta': np.nan, 'RMSE_theta': np.nan,
+        'ITSE_psi': np.nan, 'IAE_psi': np.nan, 'RMSE_psi': np.nan
+    }
     
     try:
         sol = solve_ivp(
@@ -218,37 +382,86 @@ def evaluate_pid(gains, z_des, phi_des, theta_des, psi_des):
             t_span, X0, t_eval=np.linspace(0, 10, 500)
         )
         t, X = sol.t, sol.y
+        
+        # Extract all responses
         z = X[2, :]
-        error_z = z_des - z
-        tol = 0.02 * z_des
-        idx_settle = np.where(np.abs(error_z) > tol)[0]
-        metrics['t_settle'] = t[idx_settle[-1]] if len(idx_settle) > 0 else 0
-        metrics['overshoot'] = max(0, (np.max(z) - z_des) / z_des * 100)
-        rise_start, rise_end = z_des * 0.1, z_des * 0.9
-        try:
-            t_rise_start = t[np.where(z >= rise_start)[0][0]]
-            t_rise_end = t[np.where(z >= rise_end)[0][0]]
-            metrics['t_rise'] = t_rise_end - t_rise_start
-        except:
-            metrics['t_rise'] = np.nan
-        metrics['steady_error'] = np.mean(np.abs(error_z[int(0.9*len(error_z)):]))
+        phi = X[3, :]
+        theta = X[4, :]
+        psi = X[5, :]
+        
+        # Calculate metrics for each variable
+        variables = [
+            (z, z_des, 'z'),
+            (phi, phi_des, 'phi'),
+            (theta, theta_des, 'theta'),
+            (psi, psi_des, 'psi')
+        ]
+        
+        for response, desired, name in variables:
+            error = desired - response
+            tol = 0.02 * abs(desired) if abs(desired) > 0 else 0.02
+            
+            # Settling time
+            idx_settle = np.where(np.abs(error) > tol)[0]
+            metrics[f't_settle_{name}'] = t[idx_settle[-1]] if len(idx_settle) > 0 else 0
+            
+            # Overshoot
+            if desired != 0:
+                metrics[f'overshoot_{name}'] = max(0, (np.max(response) - desired) / abs(desired) * 100)
+            else:
+                metrics[f'overshoot_{name}'] = np.max(np.abs(response)) * 100
+            
+            # Rise time
+            if desired != 0:
+                rise_start, rise_end = desired * 0.1, desired * 0.9
+                try:
+                    t_rise_start = t[np.where(response >= rise_start)[0][0]]
+                    t_rise_end = t[np.where(response >= rise_end)[0][0]]
+                    metrics[f't_rise_{name}'] = t_rise_end - t_rise_start
+                except:
+                    metrics[f't_rise_{name}'] = np.nan
+            else:
+                metrics[f't_rise_{name}'] = np.nan
+            
+            # Steady state error
+            metrics[f'steady_error_{name}'] = np.mean(np.abs(error[int(0.9*len(error)):]))
+            
+            # Performance indices
+            metrics[f'ITSE_{name}'] = np.trapezoid(t * error**2, t)
+            metrics[f'IAE_{name}'] = np.trapezoid(np.abs(error), t)
+            metrics[f'RMSE_{name}'] = np.sqrt(np.mean(error**2))
 
-        metrics['ITSE'] = np.trapezoid(t * error_z**2, t)
-        metrics['IAE'] = np.trapezoid(np.abs(error_z), t)
-        metrics['RMSE'] = np.sqrt(np.mean(error_z**2))
-
-        fitness = (0.3 * min(metrics['t_settle']/10, 1) + 
-                   0.3 * min(metrics['overshoot']/100, 1) + 
-                   0.2 * min(metrics['ITSE']/50, 1) + 
-                   0.2 * min(metrics['IAE']/20, 1))
-    except:
+        # Combined fitness function considering all variables
+        fitness = (
+            0.25 * min(metrics['t_settle_z']/10, 1) + 
+            0.25 * min(metrics['overshoot_z']/100, 1) + 
+            0.10 * min(metrics['ITSE_z']/50, 1) + 
+            0.10 * min(metrics['IAE_z']/20, 1) +
+            0.08 * min(metrics['t_settle_phi']/5, 1) + 
+            0.08 * min(metrics['overshoot_phi']/100, 1) +
+            0.08 * min(metrics['t_settle_theta']/5, 1) + 
+            0.08 * min(metrics['overshoot_theta']/100, 1) +
+            0.04 * min(metrics['t_settle_psi']/5, 1) + 
+            0.04 * min(metrics['overshoot_psi']/100, 1)
+        )
+        
+    except Exception as e:
+        print(f"Error in evaluate_pid: {e}")
         fitness = 1000
-        metrics = {'t_settle': 100, 'overshoot': 1000, 't_rise': 10,
-                   'steady_error': 1, 'ITSE': 50, 'IAE': 20, 'RMSE': 50}
+        # Set all metrics to high values in case of failure
+        for name in ['z', 'phi', 'theta', 'psi']:
+            metrics[f't_settle_{name}'] = 100
+            metrics[f'overshoot_{name}'] = 1000
+            metrics[f't_rise_{name}'] = 10
+            metrics[f'steady_error_{name}'] = 1
+            metrics[f'ITSE_{name}'] = 50
+            metrics[f'IAE_{name}'] = 20
+            metrics[f'RMSE_{name}'] = 50
         t = np.linspace(0, 10, 100)
         X = np.zeros((12, len(t)))
     
-    return fitness, metrics, t, X[2, :], X
+    # CORREGIDO: Retornar solo 4 valores
+    return fitness, metrics, t, X
 
 
 def quadrotor_dynamics(t, X, m, g, Ix, Iy, Iz,
